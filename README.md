@@ -14,6 +14,11 @@ You can monitor all your GCP hosted certificate expiration time in an straighfor
 ## What this is not for?
 A replacement for external blackbox monitoring on your urls, also this won't tell you if those certificates are in use and this won't monitor applications doing their own TLS termination.
 
+## Install
+```
+$ go get -u github.com/snebel29/prometheus-gcp-ssl-exporter/cmd
+```
+
 ## Usage
 ```
 usage: prometheus-gcp-ssl-exporter --project=PROJECT [<flags>]
