@@ -14,6 +14,36 @@ You can monitor all your GCP hosted certificate expiration time in an straighfor
 ## What this is not for?
 A replacement for external blackbox monitoring on your urls, also this won't tell you if those certificates are in use and this won't monitor applications doing their own TLS termination.
 
+## Install
+```
+$ go get -u github.com/snebel29/prometheus-gcp-ssl-exporter/cmd
+```
+
+## Authentication
+The exporter needs to authenticate and be authorized to do `compute.sslCertificates.get` and `compute.sslCertificates.list` within the Google cloud compute API, to do so Google offer several [methods to authenticate for production workloads](https://cloud.google.com/docs/authentication/production) from which creating a service account is common, in a nutshell you could create a service account with the least privilege principle like this:
+
+Create custom role
+```
+$ gcloud iam roles create sslViewer \
+	--project ${PROJECT_ID} \
+	--title "Compute SSL Viewer" \
+	--description "List and Get SSL certificates" \
+	--stage GA \
+	--permissions compute.sslCertificates.get,compute.sslCertificates.list
+```
+
+Create service account
+```
+$ gcloud iam service-accounts create ${NAME}
+$ gcloud projects add-iam-policy-binding ${PROJECT_ID} --member "serviceAccount:${NAME}@${PROJECT_ID}.iam.gserviceaccount.com" --role "projects/${PROJECT_ID}/roles/sslViewer"
+$ gcloud iam service-accounts keys create ${FILE_NAME}.json --iam-account ${NAME}@${PROJECT_ID}.iam.gserviceaccount.com
+```
+
+Then create `GOOGLE_APPLICATION_CREDENTIALS` environment variable pointing to the credentials file.
+```
+$ export GOOGLE_APPLICATION_CREDENTIALS="/home/user/Downloads/${FILE_NAME}.json"
+```
+
 ## Usage
 ```
 usage: prometheus-gcp-ssl-exporter --project=PROJECT [<flags>]
@@ -42,9 +72,3 @@ $ make build
 ```
 $ make test
 ```
-
-### Synchronize vendor
-```
-$ make deps
-```
-
