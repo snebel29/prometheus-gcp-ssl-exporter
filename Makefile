@@ -5,6 +5,7 @@ LD_FLAGS="-X github.com/snebel29/prometheus-gcp-ssl-exporter/internal/pkg/cli.Ve
 build: deps
 	go build -ldflags $(LD_FLAGS) cmd/*.go
 test:
+	$(info GOOGLE_APPLICATION_CREDENTIALS=$(GOOGLE_APPLICATION_CREDENTIALS))
 	go test -v ./...
 clean:
 	go clean
