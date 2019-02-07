@@ -166,13 +166,14 @@
   revision = "b90733256f2e882e81d52f9126de08df5615afd9"
 
 [[projects]]
-  digest = "1:906f1a9ec2e0e13233c650ff08674c560e52bc303b7384db4059c741e80ecc24"
+  digest = "1:0a561fd773aade4e584543de220005606c16e56a277c82a88fe0c835e91f3514"
   name = "google.golang.org/api"
   packages = [
     "compute/v1",
     "gensupport",
     "googleapi",
     "googleapi/internal/uritemplates",
+    "sqladmin/v1beta4",
   ]
   pruneopts = "UT"
   revision = "19e022d8cf43ce81f046bae8cc18c5397cc7732f"
@@ -215,6 +216,7 @@
     "github.com/sirupsen/logrus",
     "golang.org/x/oauth2/google",
     "google.golang.org/api/compute/v1",
+    "google.golang.org/api/sqladmin/v1beta4",
     "gopkg.in/alecthomas/kingpin.v2",
   ]
   solver-name = "gps-cdcl"

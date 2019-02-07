@@ -16,6 +16,7 @@ import (
 	c "github.com/snebel29/prometheus-gcp-ssl-exporter/internal/pkg/cli"
 
 	"golang.org/x/oauth2/google"
+	"google.golang.org/api/sqladmin/v1beta4"
 	"google.golang.org/api/compute/v1"
 )
 
@@ -85,6 +86,11 @@ func (collector *SSLCollector) Collect(ch chan<- prometheus.Metric) {
 	}
 }
 
+type gcpCertificate struct {
+	name string
+	raw  string
+}
+
 type certificate struct {
 	name 			string
 	project         string
@@ -92,14 +98,49 @@ type certificate struct {
 }
 
 func getHTTPClient() (*http.Client, error) {
-	c, err := google.DefaultClient(context.Background(), compute.ComputeScope)
+	c, err := google.DefaultClient(context.Background(), "")
 	if err != nil {
 		return nil, err
 	}
 	return c, nil
 }
 
-func fetchFromGCP(projects []string, client *http.Client) ([]*certificate, error) {
+func fetchFromCloudSQL(projects []string, client *http.Client) ([]*certificate, error) {
+	svc, err := sqladmin.New(client)
+	if err != nil {
+		e := fmt.Sprintf("Trying to instantiate cloudsql service: [%s]", err)
+		return nil, errors.New(e)
+	}
+
+	var projectsCertificates []*certificate
+
+	for _, project := range projects {
+		instances, err := svc.Instances.List(project).Do()
+		if err != nil {
+			e := fmt.Sprintf("Trying to list instnces for instance project [%s] with error [%s]", project, err)
+			return nil, errors.New(e)
+		}
+		for _, instance := range instances.Items {
+
+			certificates, err := svc.SslCerts.List(project, instance.Name).Do()
+			// TODO: Return data from successfull projects in partial failures scenarios
+			if err != nil {
+				e := fmt.Sprintf("Trying to list certificates for instance [%s] in project [%s] with error [%s]", instance.Name, project, err)
+				return nil, errors.New(e)
+			}
+
+			c, err := toInternalCertificates(getCertificateFromCloudsqlAPICertificate(certificates), project)
+			if err != nil {
+				return nil, err
+			}
+
+			projectsCertificates = append(projectsCertificates, c...)
+		}
+	}
+	return projectsCertificates, nil
+}
+
+func fetchFromCompute(projects []string, client *http.Client) ([]*certificate, error) {
 	svc, err := compute.New(client)
 	if err != nil {
 		e := fmt.Sprintf("Trying to instantiate compute service: [%s]", err)
@@ -116,7 +157,7 @@ func fetchFromGCP(projects []string, client *http.Client) ([]*certificate, error
 			return nil, errors.New(e)
 		}
 
-		c, err := toInternalCertificates(certificates, project)
+		c, err := toInternalCertificates(getCertificateFromComputeAPICertificate(certificates), project)
 		if err != nil {
 			return nil, err
 		}
@@ -126,30 +167,65 @@ func fetchFromGCP(projects []string, client *http.Client) ([]*certificate, error
 	return projectsCertificates, nil
 }
 
-func toInternalCertificates(certList *compute.SslCertificateList, project string) ([]*certificate, error) {
+func fetchFromGCP(projects []string, client *http.Client) ([]*certificate, error) {
+	comp, err := fetchFromCompute(projects, client)
+	if err != nil {
+		return nil, err
+	}
+	cloud, err := fetchFromCloudSQL(projects, client)
+	if err != nil {
+		return nil, err
+	}
+	combined := append(comp, cloud...)
+	return combined, nil
+}
+
+func getCertificateFromComputeAPICertificate(certs *compute.SslCertificateList) []*gcpCertificate {
+	var gcpCerts []*gcpCertificate
+	for _, c := range certs.Items {
+		gcpCerts = append(gcpCerts, &gcpCertificate{
+			name: c.Name,
+			raw:  c.Certificate,
+		})
+	}
+	return gcpCerts
+}
+
+func getCertificateFromCloudsqlAPICertificate(certs *sqladmin.SslCertsListResponse) []*gcpCertificate {
+	var gcpCerts []*gcpCertificate
+	for _, c := range certs.Items {
+		gcpCerts = append(gcpCerts, &gcpCertificate{
+			name: fmt.Sprintf("%s-%s", c.Instance, c.CommonName),
+			raw:  c.Cert,
+		})
+	}
+	return gcpCerts
+}
+
+func toInternalCertificates(certList []*gcpCertificate, project string) ([]*certificate, error) {
 
 	var projectsCertificates []*certificate
-	for _, cert := range certList.Items {
-		c, err := parseCertificate(cert.Certificate)
+	for _, cert := range certList {
+		c, err := parseCertificate(cert.raw)
 		if err != nil {
 			return nil, err
 		}
 		secondsToExpire := float64(c.NotAfter.Unix() - time.Now().Unix())
 		log.Debugf("%v %v %v %v %v", 
-			cert.Name, c.NotAfter, time.Now().Unix(), secondsToExpire, c.NotAfter.Unix())
+			cert.name, c.NotAfter, time.Now().Unix(), secondsToExpire, c.NotAfter.Unix())
 
 		projectsCertificates = append(projectsCertificates, &certificate{
-													name: cert.Name,
+													name: cert.name,
 													project: project,
 													secondsToExpire: secondsToExpire})							
 	}
 	return projectsCertificates, nil
 }
 
-func parseCertificate(cert string) (*x509.Certificate, error) {
+func parseCertificate(raw string) (*x509.Certificate, error) {
 	var nilCertificate *x509.Certificate
 	var blocks []byte
-	remainder := []byte(cert)
+	remainder := []byte(raw)
 	for {
 		var block *pem.Block
 		block, remainder = pem.Decode(remainder)
