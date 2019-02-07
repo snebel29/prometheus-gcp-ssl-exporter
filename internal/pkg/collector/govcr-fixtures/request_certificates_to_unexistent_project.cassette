@@ -1,0 +1,74 @@
+{
+  "Name": "request_certificates_to_unexistent_project",
+  "Tracks": [
+    {
+      "Request": {
+        "Method": "GET",
+        "URL": {
+          "Scheme": "https",
+          "Opaque": "",
+          "User": null,
+          "Host": "www.googleapis.com",
+          "Path": "/compute/v1/projects/sojern-unexistent-project/global/sslCertificates",
+          "RawPath": "/compute/v1/projects/sojern-unexistent-project/global/sslCertificates",
+          "ForceQuery": false,
+          "RawQuery": "alt=json\u0026prettyPrint=false",
+          "Fragment": ""
+        },
+        "Header": {
+          "User-Agent": [
+            "google-api-go-client/0.5"
+          ]
+        },
+        "Body": ""
+      },
+      "Response": {
+        "Status": "404 Not Found",
+        "StatusCode": 404,
+        "Proto": "HTTP/2.0",
+        "ProtoMajor": 2,
+        "ProtoMinor": 0,
+        "Header": {
+          "Alt-Svc": [
+            "quic=\":443\"; ma=2592000; v=\"44,43,39\""
+          ],
+          "Cache-Control": [
+            "private, max-age=0"
+          ],
+          "Content-Type": [
+            "application/json; charset=UTF-8"
+          ],
+          "Date": [
+            "Thu, 07 Feb 2019 16:13:54 GMT"
+          ],
+          "Expires": [
+            "Thu, 07 Feb 2019 16:13:54 GMT"
+          ],
+          "Server": [
+            "GSE"
+          ],
+          "Vary": [
+            "Origin",
+            "X-Origin"
+          ],
+          "X-Content-Type-Options": [
+            "nosniff"
+          ],
+          "X-Frame-Options": [
+            "SAMEORIGIN"
+          ],
+          "X-Xss-Protection": [
+            "1; mode=block"
+          ]
+        },
+        "Body": "eyJlcnJvciI6eyJlcnJvcnMiOlt7ImRvbWFpbiI6Imdsb2JhbCIsInJlYXNvbiI6Im5vdEZvdW5kIiwibWVzc2FnZSI6IkZhaWxlZCB0byBmaW5kIHByb2plY3Qgc29qZXJuLXVuZXhpc3RlbnQtcHJvamVjdCJ9XSwiY29kZSI6NDA0LCJtZXNzYWdlIjoiRmFpbGVkIHRvIGZpbmQgcHJvamVjdCBzb2plcm4tdW5leGlzdGVudC1wcm9qZWN0In19",
+        "ContentLength": -1,
+        "TransferEncoding": null,
+        "Trailer": null,
+        "TLS": null
+      },
+      "ErrType": "",
+      "ErrMsg": ""
+    }
+  ]
+}

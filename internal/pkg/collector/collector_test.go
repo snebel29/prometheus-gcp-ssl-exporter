@@ -2,7 +2,9 @@ package collector
 
 import (
 	"fmt"
+	"errors"
 	"testing"
+	"net/http"
 	"github.com/seborama/govcr"
 	"google.golang.org/api/compute/v1"
 	"github.com/prometheus/client_golang/prometheus"
@@ -66,30 +68,63 @@ func TestParseCertificate(t *testing.T) {
 	
 }
 
-func TestFetchFromGCP(t *testing.T) {
-	client, err := getHTTPClient()
-	if err != nil {
-		t.Fatal(err)
-	}
-	vcr := govcr.NewVCR("request_certificates_to_multiple_projects_gcp",
-		&govcr.VCRConfig{
-			Client:    client,
-			RemoveTLS: true,
-	})
+func helperCertificateRequest(
+	t *testing.T,
+	f func(projects []string, client *http.Client) ([]*certificate, error),
+	casseteName string,
+	projects []string,
+	numbCerts int,
+	clientShouldSuceed bool) {
 
-	certs, err := fetchFromGCP([]string{"sojern-platform", "sojern-sre-prod"}, vcr.Client)
-	if err != nil {
-		t.Error(err)
-	}
-	if len(certs) != 14 {
-		t.Errorf("Wrong number of certs, should be %d", len(certs))
-	}
-	certs, err = fetchFromGCP([]string{"sojern-unexistent-project"}, vcr.Client)
-	if err == nil {
-		t.Error(err)
-	}
+		client, err := getHTTPClient()
+		if err != nil {
+			t.Fatal(err)
+		}
+		vcr := govcr.NewVCR(
+			casseteName,
+			&govcr.VCRConfig{
+				Client:    client,
+				RemoveTLS: true,
+		})
+	
+		certs, err := f(projects, vcr.Client)
+		if clientShouldSuceed && err != nil {
+			t.Error(err)
+		}
+		if !clientShouldSuceed && err == nil {
+			t.Error(errors.New("there should have been an error"))
+		}
+		if len(certs) != numbCerts {
+			t.Errorf("Wrong number of certs, %d should be %d", len(certs), numbCerts)
+		}
+		fmt.Printf("govcr stats %+v\n", vcr.Stats())
+}
 
-	fmt.Printf("govcr stats %+v\n", vcr.Stats())
+func TestFetchFromCompute(t *testing.T) {
+	helperCertificateRequest(
+		t,
+		fetchFromCompute,
+		"request_compute_certificates",
+		[]string{"sojern-platform", "sojern-sre-prod"},
+		14, true)
+}
+
+func TestFetchFromGCPMultipleProjects(t *testing.T) {
+	helperCertificateRequest(
+		t,
+		fetchFromGCP,
+		"request_certificates_to_multiple_projects_gcp",
+		[]string{"sojern-platform", "sojern-sre-prod"},
+		14, true)
+}
+
+func TestFetchFromGCPUnexistentProjects(t *testing.T) {
+	helperCertificateRequest(
+		t,
+		fetchFromGCP,
+		"request_certificates_to_unexistent_project",
+		[]string{"sojern-unexistent-project"},
+		0, false)
 }
 
 func TestToInternalCertificates(t *testing.T) {

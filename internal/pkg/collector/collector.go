@@ -99,7 +99,7 @@ func getHTTPClient() (*http.Client, error) {
 	return c, nil
 }
 
-func fetchFromGCP(projects []string, client *http.Client) ([]*certificate, error) {
+func fetchFromCompute(projects []string, client *http.Client) ([]*certificate, error) {
 	svc, err := compute.New(client)
 	if err != nil {
 		e := fmt.Sprintf("Trying to instantiate compute service: [%s]", err)
@@ -124,6 +124,14 @@ func fetchFromGCP(projects []string, client *http.Client) ([]*certificate, error
 		projectsCertificates = append(projectsCertificates, c...)
 	}
 	return projectsCertificates, nil
+}
+
+func fetchFromGCP(projects []string, client *http.Client) ([]*certificate, error) {
+	c, err := fetchFromCompute(projects, client)
+	if err != nil {
+		return nil, err
+	}
+	return c, nil
 }
 
 func toInternalCertificates(certList *compute.SslCertificateList, project string) ([]*certificate, error) {
