@@ -7,7 +7,6 @@ export GOOGLE_APPLICATION_CREDENTIALS
 build: deps
 	go build -ldflags $(LD_FLAGS) cmd/*.go
 test:
-	$(info GOOGLE_APPLICATION_CREDENTIALS=$(GOOGLE_APPLICATION_CREDENTIALS))
 	go test -v ./...
 clean:
 	go clean
