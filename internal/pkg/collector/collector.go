@@ -92,7 +92,7 @@ type certificate struct {
 }
 
 func getHTTPClient() (*http.Client, error) {
-	c, err := google.DefaultClient(context.Background(), compute.ComputeScope)
+	c, err := google.DefaultClient(context.Background(), "")
 	if err != nil {
 		return nil, err
 	}
