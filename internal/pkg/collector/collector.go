@@ -46,7 +46,7 @@ type SSLCollector struct {
 
 // NewSSLCollector Returns a new ssl collector
 func NewSSLCollector(projects []string, client *http.Client) *SSLCollector {
-	variableLabels := []string{"name", "project"}
+	variableLabels := []string{"name", "project", "service"}
 	return &SSLCollector{
 		sslValidity: prometheus.NewDesc("gcp_ssl_validity_seconds",
 			"Time for an ssl certificate to expire",
@@ -76,6 +76,7 @@ func (collector *SSLCollector) Collect(ch chan<- prometheus.Metric) {
 			c.secondsToExpire,
 			c.name,
 			c.project,
+			c.service,
 		)
 	
 		if err != nil {
@@ -87,13 +88,15 @@ func (collector *SSLCollector) Collect(ch chan<- prometheus.Metric) {
 }
 
 type gcpCertificate struct {
-	name string
-	raw  string
+	name 	string
+	raw  	string
+	service string
 }
 
 type certificate struct {
 	name 			string
 	project         string
+	service			string
 	secondsToExpire float64
 }
 
@@ -184,8 +187,9 @@ func getCertificateFromComputeAPICertificate(certs *compute.SslCertificateList) 
 	var gcpCerts []*gcpCertificate
 	for _, c := range certs.Items {
 		gcpCerts = append(gcpCerts, &gcpCertificate{
-			name: c.Name,
-			raw:  c.Certificate,
+			name:    c.Name,
+			raw:  	 c.Certificate,
+			service: "compute",
 		})
 	}
 	return gcpCerts
@@ -195,17 +199,18 @@ func getCertificateFromCloudsqlAPICertificate(certs *sqladmin.SslCertsListRespon
 	var gcpCerts []*gcpCertificate
 	for _, c := range certs.Items {
 		gcpCerts = append(gcpCerts, &gcpCertificate{
-			name: fmt.Sprintf("%s-%s", c.Instance, c.CommonName),
-			raw:  c.Cert,
+			name:    fmt.Sprintf("%s-%s", c.Instance, c.CommonName),
+			raw:     c.Cert,
+			service: "cloudsql",
 		})
 	}
 	return gcpCerts
 }
 
-func toInternalCertificates(certList []*gcpCertificate, project string) ([]*certificate, error) {
+func toInternalCertificates(gcpCertList []*gcpCertificate, project string) ([]*certificate, error) {
 
 	var projectsCertificates []*certificate
-	for _, cert := range certList {
+	for _, cert := range gcpCertList {
 		c, err := parseCertificate(cert.raw)
 		if err != nil {
 			return nil, err
@@ -215,9 +220,10 @@ func toInternalCertificates(certList []*gcpCertificate, project string) ([]*cert
 			cert.name, c.NotAfter, time.Now().Unix(), secondsToExpire, c.NotAfter.Unix())
 
 		projectsCertificates = append(projectsCertificates, &certificate{
-													name: cert.name,
-													project: project,
-													secondsToExpire: secondsToExpire})							
+									name:            cert.name,
+									project:         project,
+									secondsToExpire: secondsToExpire,
+									service:         cert.service})							
 	}
 	return projectsCertificates, nil
 }
