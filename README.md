@@ -63,7 +63,10 @@ Example
 $ prometheus-gcp-ssl-exporter -p my-project-id1 -p my-project-id2
 ```
 ### Docker image
-This exporter is packaged and published on dockerhub [here](https://hub.docker.com/r/snebel29/prometheus-gcp-ssl-exporter) can be run as a docker container.
+This exporter is packaged and published on dockerhub [here](https://hub.docker.com/r/snebel29/prometheus-gcp-ssl-exporter) therefore can be run as a docker container.
+
+> :warning: Alpine `ca-certificates` are shipped in a best effort basis and may eventually be out of date, to know more about this problem with certificates and docker images take a look [here](https://stackoverflow.com/questions/26028971/docker-container-ssl-certificates)
+
 ```
 $ docker run -it --rm \
 	-p 127.0.0.1:8888:8888 \
