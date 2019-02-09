@@ -10,4 +10,27 @@ jobs:
 
       - run: make test
       - run: make build
-      - run: make container
+    
+  release:
+    docker:
+      - image: circleci/golang:1.11
+
+    working_directory: /go/src/github.com/snebel29/prometheus-gcp-ssl-exporter
+    steps:
+      - setup_remote_docker:
+          docker_layer_caching: true
+
+      - checkout
+
+      - run: make docker-image
+      - run: make VERSION=${CIRCLE_TAG} publish-docker-image
+
+workflows:
+  version: 2
+  build-and-release:
+    jobs:
+      - build
+      - release:
+          filters:
+            tags:
+              only: /^v\d\.\d\.\d.*$/
