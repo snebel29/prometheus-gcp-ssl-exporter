@@ -22,7 +22,6 @@ docker-image:
 		-t prometheus-gcp-ssl-exporter:$(VERSION) .
 
 publish-docker-image:
-	echo "${DOCKER_PASSWORD}" | docker login -u ${DOCKER_USER} --password-stdin
 	docker push prometheus-gcp-ssl-exporter:$(VERSION)
 	docker push prometheus-gcp-ssl-exporter:latest
 
