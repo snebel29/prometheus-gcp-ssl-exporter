@@ -1,12 +1,12 @@
 VERSION=x.x.x-development
 REPOSITORY=github.com/snebel29/prometheus-gcp-ssl-exporter
 GOOGLE_APPLICATION_CREDENTIALS=$(realpath internal/pkg/collector/govcr-fixtures/application_default_credentials.json)
-LD_FLAGS="-X ${REPOSITORY}/internal/pkg/cli.Version=$(VERSION)"
+LD_FLAGS="-X ${REPOSITORY}/internal/pkg/cli.Version=$(VERSION) -w -extldflags -static"
 
 export GOOGLE_APPLICATION_CREDENTIALS
 
 build: deps
-	go build -ldflags $(LD_FLAGS) cmd/*.go
+	CGO_ENABLED=0 go build -ldflags $(LD_FLAGS) cmd/*.go
 test:
 	go test -v ./...
 clean:

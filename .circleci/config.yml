@@ -8,6 +8,6 @@ jobs:
     steps:
       - checkout
 
-      - run: make deps
       - run: make test
       - run: make build
+      - run: make container
