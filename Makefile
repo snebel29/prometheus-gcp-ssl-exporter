@@ -13,6 +13,7 @@ clean:
 	go clean
 deps:
 	dep ensure -v
+
 docker-image:
 	docker build -f build/Dockerfile \
 		--build-arg VERSION=$(VERSION) \
@@ -20,4 +21,7 @@ docker-image:
 		-t prometheus-gcp-ssl-exporter:latest \
 		-t prometheus-gcp-ssl-exporter:$(VERSION) .
 
-.PHONY: build test clean docker-image
+publish-docker-image:
+	docker push 
+
+.PHONY: build test clean docker-image publish-docker-image
