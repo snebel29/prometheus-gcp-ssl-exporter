@@ -22,8 +22,8 @@ jobs:
 
       - checkout
 
-      - run: make docker-image
       - run: echo "${DOCKER_PASSWORD}" | docker login -u ${DOCKER_USER} --password-stdin
+      - run: make VERSION=${CIRCLE_TAG} docker-image
       - run: make VERSION=${CIRCLE_TAG} publish-docker-image
 
 workflows:
