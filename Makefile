@@ -22,7 +22,7 @@ docker-image:
 		-t prometheus-gcp-ssl-exporter:$(VERSION) .
 
 publish-docker-image:
-	docker push prometheus-gcp-ssl-exporter:$(VERSION)
-	docker push prometheus-gcp-ssl-exporter:latest
+	docker push snebel29/prometheus-gcp-ssl-exporter:$(VERSION)
+	docker push snebel29/prometheus-gcp-ssl-exporter:latest
 
 .PHONY: build test clean docker-image publish-docker-image
