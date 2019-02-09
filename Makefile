@@ -18,8 +18,8 @@ docker-image:
 	docker build -f build/Dockerfile \
 		--build-arg VERSION=$(VERSION) \
 		--build-arg REPOSITORY=$(REPOSITORY) \
-		-t prometheus-gcp-ssl-exporter:latest \
-		-t prometheus-gcp-ssl-exporter:$(VERSION) .
+		-t snebel29/prometheus-gcp-ssl-exporter:latest \
+		-t snebel29/prometheus-gcp-ssl-exporter:$(VERSION) .
 
 publish-docker-image:
 	docker push snebel29/prometheus-gcp-ssl-exporter:$(VERSION)
