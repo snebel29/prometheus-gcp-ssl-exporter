@@ -22,6 +22,8 @@ docker-image:
 		-t prometheus-gcp-ssl-exporter:$(VERSION) .
 
 publish-docker-image:
-	docker push 
+	docker login -u=${DOCKER_USER} -p=${DOCKER_PASSWORD}
+	docker push prometheus-gcp-ssl-exporter:$(VERSION)
+	docker push prometheus-gcp-ssl-exporter:latest
 
 .PHONY: build test clean docker-image publish-docker-image
