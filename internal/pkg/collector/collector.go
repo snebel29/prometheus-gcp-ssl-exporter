@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"time"
+	"strings"
 
 	log "github.com/sirupsen/logrus"
 
@@ -16,8 +17,8 @@ import (
 	c "github.com/snebel29/prometheus-gcp-ssl-exporter/internal/pkg/cli"
 
 	"golang.org/x/oauth2/google"
-	"google.golang.org/api/sqladmin/v1beta4"
 	"google.golang.org/api/compute/v1"
+	"google.golang.org/api/sqladmin/v1beta4"
 )
 
 // Run the collector to accept http scraping requests
@@ -26,15 +27,15 @@ func Run(cli *c.CLI) error {
 	if err != nil {
 		return err
 	}
-	Register(cli.Projects, client)
+	Register(cli.Projects, client, cli.OnlyInUse)
 	http.Handle(cli.MetricsPath, promhttp.Handler())
 	log.Infof("Beginning to serve on port :%s", cli.Port)
 	return http.ListenAndServe(fmt.Sprintf(":%s", cli.Port), nil)
 }
 
 // Register instantiate as new SSL collector then registers with prometheus
-func Register(projects []string, client *http.Client) {
-	prometheus.MustRegister(NewSSLCollector(projects, client))
+func Register(projects []string, client *http.Client, onlyInUse bool) {
+	prometheus.MustRegister(NewSSLCollector(projects, client, onlyInUse))
 }
 
 // SSLCollector represents the collector
@@ -42,43 +43,45 @@ type SSLCollector struct {
 	sslValidity *prometheus.Desc
 	projects    []string
 	httpClient  *http.Client
+	onlyInUse   bool   // Whether we should fetch compute certs in use by httpsProxies only
 }
 
 // NewSSLCollector Returns a new ssl collector
-func NewSSLCollector(projects []string, client *http.Client) *SSLCollector {
+func NewSSLCollector(projects []string, client *http.Client, onlyInUse bool) *SSLCollector {
 	variableLabels := []string{"name", "project", "service"}
 	return &SSLCollector{
 		sslValidity: prometheus.NewDesc("gcp_ssl_validity_seconds",
 			"Time for an ssl certificate to expire",
 			variableLabels, nil),
-		projects: projects,
+		projects:   projects,
 		httpClient: client,
+		onlyInUse:  onlyInUse,
 	}
 }
 
 // Describe sends the super-set of all possible descriptors of metrics
-func (collector *SSLCollector) Describe(ch chan<- *prometheus.Desc) {
-	ch <- collector.sslValidity
+func (c *SSLCollector) Describe(ch chan<- *prometheus.Desc) {
+	ch <- c.sslValidity
 }
 
 // Collect is called by the Prometheus registry when collecting metrics
-func (collector *SSLCollector) Collect(ch chan<- prometheus.Metric) {
-	valueList, err := fetchFromGCP(collector.projects, collector.httpClient)
+func (c *SSLCollector) Collect(ch chan<- prometheus.Metric) {
+	valueList, err := c.fetchFromGCP()
 	if err != nil {
 		log.Errorf("%s", err)
 		return
 	}
 
-	for _, c := range valueList {
+	for _, v := range valueList {
 		metric, err := prometheus.NewConstMetric(
-			collector.sslValidity,
+			c.sslValidity,
 			prometheus.GaugeValue,
-			c.secondsToExpire,
-			c.name,
-			c.project,
-			c.service,
+			v.secondsToExpire,
+			v.name,
+			v.project,
+			v.service,
 		)
-	
+
 		if err != nil {
 			log.Errorf("%s", err)
 		} else {
@@ -88,15 +91,15 @@ func (collector *SSLCollector) Collect(ch chan<- prometheus.Metric) {
 }
 
 type gcpCertificate struct {
-	name 	string
-	raw  	string
+	name    string
+	raw     string
 	service string
 }
 
 type certificate struct {
-	name 			string
+	name            string
 	project         string
-	service			string
+	service         string
 	secondsToExpire float64
 }
 
@@ -108,8 +111,21 @@ func getHTTPClient() (*http.Client, error) {
 	return c, nil
 }
 
-func fetchFromCloudSQL(projects []string, client *http.Client) ([]*certificate, error) {
-	svc, err := sqladmin.New(client)
+func (c *SSLCollector) fetchFromGCP() ([]*certificate, error) {
+	comp, err := c.fetchFromCompute()
+	if err != nil {
+		return nil, err
+	}
+	cloud, err := c.fetchFromCloudSQL()
+	if err != nil {
+		return nil, err
+	}
+	combined := append(comp, cloud...)
+	return combined, nil
+}
+
+func (c *SSLCollector) fetchFromCloudSQL() ([]*certificate, error) {
+	svc, err := sqladmin.New(c.httpClient)
 	if err != nil {
 		e := fmt.Sprintf("Trying to instantiate cloudsql service: [%s]", err)
 		return nil, errors.New(e)
@@ -117,10 +133,10 @@ func fetchFromCloudSQL(projects []string, client *http.Client) ([]*certificate, 
 
 	var projectsCertificates []*certificate
 
-	for _, project := range projects {
+	for _, project := range c.projects {
 		instances, err := svc.Instances.List(project).Do()
 		if err != nil {
-			e := fmt.Sprintf("Trying to list instnces for instance project [%s] with error [%s]", project, err)
+			e := fmt.Sprintf("Trying to list instances for instance project [%s] with error [%s]", project, err)
 			return nil, errors.New(e)
 		}
 		for _, instance := range instances.Items {
@@ -132,27 +148,67 @@ func fetchFromCloudSQL(projects []string, client *http.Client) ([]*certificate, 
 				return nil, errors.New(e)
 			}
 
-			c, err := toInternalCertificates(getCertificateFromCloudsqlAPICertificate(certificates), project)
+			certs, err := toInternalCertificates(getCertificateFromCloudsqlAPICertificate(certificates), project)
 			if err != nil {
 				return nil, err
 			}
 
-			projectsCertificates = append(projectsCertificates, c...)
+			projectsCertificates = append(projectsCertificates, certs...)
 		}
 	}
 	return projectsCertificates, nil
 }
 
-func fetchFromCompute(projects []string, client *http.Client) ([]*certificate, error) {
-	svc, err := compute.New(client)
-	if err != nil {
-		e := fmt.Sprintf("Trying to instantiate compute service: [%s]", err)
-		return nil, errors.New(e)
-	}
-
+// Fetch certificates from compute API which are bind to an httpsProxy
+func (c *SSLCollector) fetchFromComputeOnlyInUse(svc *compute.Service) ([]*certificate, error) {
 	var projectsCertificates []*certificate
 
-	for _, project := range projects {
+	for _, project := range c.projects {
+		httpsProxies, err := svc.TargetHttpsProxies.List(project).Do()
+		// TODO: Return data from successfull projects in partial failures scenarios
+		if err != nil {
+			e := fmt.Sprintf("Trying to list httpsProxies in project [%s] with error [%s]", project, err)
+			return nil, errors.New(e)
+		}
+
+		var m map[string]bool
+		m = make(map[string]bool)
+
+		for _, httpsProxy := range httpsProxies.Items {
+
+
+			for _, httpsProxyCertURI := range httpsProxy.SslCertificates {
+				s := strings.Split(httpsProxyCertURI, "/")
+				httpsProxyCertName := s[len(s)-1]
+
+				// Same certificate could be bind to multiple httpsProxies, we don't want duplicates
+				if _, exists := m[httpsProxyCertName]; exists { break }
+				m[httpsProxyCertName] = true
+
+				hc, err := svc.SslCertificates.Get(project, httpsProxyCertName).Do()
+				if err != nil {
+					e := fmt.Sprintf("Trying to get certificate [%s] in project [%s] with error [%s]", httpsProxyCertName, project, err)
+					return nil, errors.New(e)
+				}
+
+				certificates := &compute.SslCertificateList{Items: []*compute.SslCertificate{hc}}
+				certs, err := toInternalCertificates(getCertificateFromComputeAPICertificate(certificates), project)
+				if err != nil {
+					return nil, err
+				}
+				projectsCertificates = append(projectsCertificates, certs...)
+			}
+		}
+	}
+
+	return projectsCertificates, nil
+}
+
+// Fetch all certificates from compute API even if they are not bind to an httpsProxy
+func (c *SSLCollector) fetchFromComputeAll(svc *compute.Service) ([]*certificate, error) {
+	var projectsCertificates []*certificate
+
+	for _, project := range c.projects {
 		certificates, err := svc.SslCertificates.List(project).Do()
 		// TODO: Return data from successfull projects in partial failures scenarios
 		if err != nil {
@@ -160,27 +216,37 @@ func fetchFromCompute(projects []string, client *http.Client) ([]*certificate, e
 			return nil, errors.New(e)
 		}
 
-		c, err := toInternalCertificates(getCertificateFromComputeAPICertificate(certificates), project)
+		certs, err := toInternalCertificates(getCertificateFromComputeAPICertificate(certificates), project)
 		if err != nil {
 			return nil, err
 		}
-
-		projectsCertificates = append(projectsCertificates, c...)
+		projectsCertificates = append(projectsCertificates, certs...)
 	}
+
 	return projectsCertificates, nil
 }
 
-func fetchFromGCP(projects []string, client *http.Client) ([]*certificate, error) {
-	comp, err := fetchFromCompute(projects, client)
+func (c *SSLCollector) fetchFromCompute() ([]*certificate, error) {
+	svc, err := compute.New(c.httpClient)
 	if err != nil {
-		return nil, err
+		e := fmt.Sprintf("Trying to instantiate compute service: [%s]", err)
+		return nil, errors.New(e)
 	}
-	cloud, err := fetchFromCloudSQL(projects, client)
+
+	var f func(svc *compute.Service) ([]*certificate, error)
+
+	if c.onlyInUse {
+		f = c.fetchFromComputeOnlyInUse
+	} else {
+		f = c.fetchFromComputeAll
+	}
+
+	projectsCertificates, err := f(svc)
 	if err != nil {
-		return nil, err
+		e := fmt.Sprintf("Trying to fetch from compute service: [%s]", err)
+		return nil, errors.New(e)	
 	}
-	combined := append(comp, cloud...)
-	return combined, nil
+	return projectsCertificates, nil
 }
 
 func getCertificateFromComputeAPICertificate(certs *compute.SslCertificateList) []*gcpCertificate {
@@ -188,7 +254,7 @@ func getCertificateFromComputeAPICertificate(certs *compute.SslCertificateList) 
 	for _, c := range certs.Items {
 		gcpCerts = append(gcpCerts, &gcpCertificate{
 			name:    c.Name,
-			raw:  	 c.Certificate,
+			raw:     c.Certificate,
 			service: "compute",
 		})
 	}
@@ -216,14 +282,14 @@ func toInternalCertificates(gcpCertList []*gcpCertificate, project string) ([]*c
 			return nil, err
 		}
 		secondsToExpire := float64(c.NotAfter.Unix() - time.Now().Unix())
-		log.Debugf("%v %v %v %v %v", 
+		log.Debugf("%v %v %v %v %v",
 			cert.name, c.NotAfter, time.Now().Unix(), secondsToExpire, c.NotAfter.Unix())
 
 		projectsCertificates = append(projectsCertificates, &certificate{
-									name:            cert.name,
-									project:         project,
-									secondsToExpire: secondsToExpire,
-									service:         cert.service})							
+			name:            cert.name,
+			project:         project,
+			secondsToExpire: secondsToExpire,
+			service:         cert.service})
 	}
 	return projectsCertificates, nil
 }

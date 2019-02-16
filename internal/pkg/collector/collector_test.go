@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"errors"
 	"testing"
-	"net/http"
 	"github.com/seborama/govcr"
 	"github.com/prometheus/client_golang/prometheus"
 )
@@ -69,24 +68,22 @@ func TestParseCertificate(t *testing.T) {
 
 func helperCertificateRequest(
 	t *testing.T,
-	f func(projects []string, client *http.Client) ([]*certificate, error),
+	f func() ([]*certificate, error),
 	casseteName string,
-	projects []string,
+	c *SSLCollector,
 	numbCerts int,
 	clientShouldSuceed bool) {
 
-		client, err := getHTTPClient()
-		if err != nil {
-			t.Fatal(err)
-		}
 		vcr := govcr.NewVCR(
 			casseteName,
 			&govcr.VCRConfig{
-				Client:    client,
+				Client:    c.httpClient,
 				RemoveTLS: true,
 		})
+
+		c.httpClient = vcr.Client
 	
-		certs, err := f(projects, vcr.Client)
+		certs, err := f()
 		if clientShouldSuceed && err != nil {
 			t.Error(err)
 		}
@@ -100,38 +97,72 @@ func helperCertificateRequest(
 }
 
 func TestFetchFromCloudSQL(t *testing.T) {
+	client, err := getHTTPClient()
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := NewSSLCollector([]string{"sojern-dev"}, client, false)
 	helperCertificateRequest(
 		t,
-		fetchFromCloudSQL,
+		c.fetchFromCloudSQL,
 		"request_cloudsql_certificates",
-		[]string{"sojern-dev"},
+		c,
+		2, true)
+}
+
+func TestFetchFromComputeOnlyInUse(t *testing.T) {
+	client, err := getHTTPClient()
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := NewSSLCollector([]string{"sojern-dev"}, client, true)
+	helperCertificateRequest(
+		t,
+		c.fetchFromCompute,
+		"request_compute_certificates_only_in_use",
+		c,
 		2, true)
 }
 
 func TestFetchFromCompute(t *testing.T) {
+	client, err := getHTTPClient()
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := NewSSLCollector([]string{"sojern-platform", "sojern-sre-prod"}, client, false)
 	helperCertificateRequest(
 		t,
-		fetchFromCompute,
+		c.fetchFromCompute,
 		"request_compute_certificates",
-		[]string{"sojern-platform", "sojern-sre-prod"},
+		c,
 		14, true)
 }
 
 func TestFetchFromGCPMultipleProjects(t *testing.T) {
+	client, err := getHTTPClient()
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := NewSSLCollector([]string{"sojern-platform", "sojern-sre-prod"}, client, false)
 	helperCertificateRequest(
 		t,
-		fetchFromGCP,
+		c.fetchFromGCP,
 		"request_certificates_to_multiple_projects_gcp",
-		[]string{"sojern-platform", "sojern-sre-prod"},
+		c,
 		16, true)
 }
 
 func TestFetchFromGCPUnexistentProjects(t *testing.T) {
+	client, err := getHTTPClient()
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := NewSSLCollector([]string{"sojern-unexistent-project"}, client, false)
 	helperCertificateRequest(
 		t,
-		fetchFromGCP,
+		c.fetchFromGCP,
 		"request_certificates_to_unexistent_project",
-		[]string{"sojern-unexistent-project"},
+		c,
 		0, false)
 }
 
@@ -170,7 +201,10 @@ func TestCollect(t *testing.T) {
 			Client:    client,
 			RemoveTLS: true,
 	})
-	collector := NewSSLCollector([]string{"sojern-platform", "sojern-dev"}, vcr.Client)
+	collector := NewSSLCollector(
+		[]string{"sojern-platform", "sojern-dev"}, 
+		vcr.Client,
+		false)
 
 	go func() {
 		collector.Collect(ch)

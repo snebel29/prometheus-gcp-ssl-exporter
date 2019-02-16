@@ -55,7 +55,9 @@ Flags:
   -m, --metrics-path="/metrics"  URI path where metrics will be exposed
       --port="8888"              Port to listen on
   -p, --project=PROJECT ...      GCP project where to fetch certificates from
+  -o, --only-in-use              Gather certificates in-use only
       --version                  Show application version.
+
 ```
 
 Example
@@ -83,6 +85,8 @@ $ make build
 ```
 
 ### Test
+> :information_source: You may beed to override `GOOGLE_APPLICATION_CREDENTIALS` within the Makefile with a valid credentials file in order to create new cassettes
+
 ```
 $ make test
 ```

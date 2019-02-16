@@ -31,6 +31,7 @@ func TestCLIGoodArgumentsParse(t *testing.T) {
 		"binaryName",
 		fmt.Sprintf("--metrics-path=%s", m),
 		fmt.Sprintf("--port=%s", p),
+		"--only-in-use",
 		fmt.Sprintf("--project=%s", project),
 		fmt.Sprintf("--project=%s", "project-2"),
 	}

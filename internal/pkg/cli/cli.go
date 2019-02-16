@@ -11,6 +11,8 @@ var (
 		"port", "Port to listen on").Default("8888").String()
 	project = kingpin.Flag(
 		"project", "GCP project where to fetch certificates from").Required().Short('p').Strings()
+	onlyInUse = kingpin.Flag(
+		"only-in-use", "Gather certificates in-use only").Short('o').Bool()
 )
 
 // CLI holds command line arguments
@@ -18,6 +20,7 @@ type CLI struct {
 	MetricsPath string
 	Port 	    string
 	Projects    []string
+	OnlyInUse   bool
 }
 
 // NewCLI returns a CLI
@@ -29,5 +32,6 @@ func NewCLI() *CLI {
 		MetricsPath: *metricsPath,
 		Port:	     *port,
 		Projects:    *project,
+		OnlyInUse:	 *onlyInUse,
 	}
 }
